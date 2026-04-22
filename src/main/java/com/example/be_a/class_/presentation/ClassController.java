@@ -2,6 +2,7 @@ package com.example.be_a.class_.presentation;
 
 import com.example.be_a.class_.application.ClassCreateService;
 import com.example.be_a.class_.application.ClassReadService;
+import com.example.be_a.class_.application.ClassStatusChangeService;
 import com.example.be_a.class_.application.ClassUpdateService;
 import com.example.be_a.class_.domain.ClassEntity;
 import com.example.be_a.class_.domain.ClassStatus;
@@ -33,15 +34,18 @@ public class ClassController {
     private final ClassCreateService classCreateService;
     private final ClassReadService classReadService;
     private final ClassUpdateService classUpdateService;
+    private final ClassStatusChangeService classStatusChangeService;
 
     public ClassController(
         ClassCreateService classCreateService,
         ClassReadService classReadService,
-        ClassUpdateService classUpdateService
+        ClassUpdateService classUpdateService,
+        ClassStatusChangeService classStatusChangeService
     ) {
         this.classCreateService = classCreateService;
         this.classReadService = classReadService;
         this.classUpdateService = classUpdateService;
+        this.classStatusChangeService = classStatusChangeService;
     }
 
     @GetMapping
@@ -69,6 +73,17 @@ public class ClassController {
         @Valid @RequestBody UpdateClassRequest request
     ) {
         return ClassDetailResponse.from(classUpdateService.update(classId, user, request.toCommand()));
+    }
+
+    @PostMapping("/{classId}/status")
+    public ChangeClassStatusResponse changeStatus(
+        @PathVariable Long classId,
+        @CurrentUser CurrentUserInfo user,
+        @Valid @RequestBody ChangeClassStatusRequest request
+    ) {
+        return ChangeClassStatusResponse.from(
+            classStatusChangeService.changeStatus(classId, user, request.targetStatus())
+        );
     }
 
     @PostMapping
