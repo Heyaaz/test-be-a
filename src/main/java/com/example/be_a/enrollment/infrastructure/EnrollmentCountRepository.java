@@ -18,18 +18,20 @@ public class EnrollmentCountRepository {
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
-    public long countByClassId(Long classId) {
+    public boolean existsByClassId(Long classId) {
         String sql = """
-            SELECT COUNT(*)
-            FROM enrollments
-            WHERE class_id = :classId
+            SELECT EXISTS(
+                SELECT 1
+                FROM enrollments
+                WHERE class_id = :classId
+            )
             """;
 
         MapSqlParameterSource parameters = new MapSqlParameterSource()
             .addValue("classId", classId);
 
-        Long count = namedParameterJdbcTemplate.queryForObject(sql, parameters, Long.class);
-        return count == null ? 0L : count;
+        Boolean exists = namedParameterJdbcTemplate.queryForObject(sql, parameters, Boolean.class);
+        return Boolean.TRUE.equals(exists);
     }
 
     public Map<Long, Long> countWaitingByClassIds(List<Long> classIds) {

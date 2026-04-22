@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.be_a.class_.domain.ClassEntity;
 import com.example.be_a.class_.domain.ClassRepository;
 import com.example.be_a.class_.domain.ClassStatus;
+import com.example.be_a.enrollment.domain.EnrollmentStatus;
 import com.example.be_a.support.MySqlTestContainerSupport;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,7 +107,7 @@ class ClassDeleteIntegrationTest extends MySqlTestContainerSupport {
     @Test
     void enrollment가_존재하면_강의를_삭제할_수_없다() throws Exception {
         ClassEntity classEntity = saveClass(10L, "삭제 대상 강의");
-        insertEnrollment(classEntity.getId(), 30L, "CANCELLED");
+        insertEnrollment(classEntity.getId(), 30L, EnrollmentStatus.CANCELLED);
 
         mockMvc.perform(delete("/api/classes/{classId}", classEntity.getId())
                 .header("X-User-Id", "10"))
@@ -138,10 +139,10 @@ class ClassDeleteIntegrationTest extends MySqlTestContainerSupport {
         jdbcTemplate.update("UPDATE classes SET status = ? WHERE id = ?", status.name(), classId);
     }
 
-    private void insertEnrollment(Long classId, Long userId, String status) {
+    private void insertEnrollment(Long classId, Long userId, EnrollmentStatus status) {
         jdbcTemplate.update("""
             INSERT INTO enrollments (class_id, user_id, status)
             VALUES (?, ?, ?)
-            """, classId, userId, status);
+            """, classId, userId, status.name());
     }
 }

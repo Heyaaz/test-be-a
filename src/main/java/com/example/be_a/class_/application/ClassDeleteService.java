@@ -42,7 +42,7 @@ public class ClassDeleteService {
             throw new ApiException(ErrorCode.CLASS_NOT_DRAFT);
         }
 
-        if (enrollmentCountRepository.countByClassId(classId) > 0) {
+        if (enrollmentCountRepository.existsByClassId(classId)) {
             throw new ApiException(ErrorCode.CLASS_DELETE_NOT_ALLOWED);
         }
 
