@@ -1,12 +1,14 @@
 package com.example.be_a.enrollment.presentation;
 
 import com.example.be_a.enrollment.application.EnrollmentApplyService;
+import com.example.be_a.enrollment.application.EnrollmentConfirmService;
 import com.example.be_a.global.config.CurrentUser;
 import com.example.be_a.user.application.CurrentUserInfo;
 import jakarta.validation.Valid;
 import java.net.URI;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,9 +18,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class EnrollmentController {
 
     private final EnrollmentApplyService enrollmentApplyService;
+    private final EnrollmentConfirmService enrollmentConfirmService;
 
-    public EnrollmentController(EnrollmentApplyService enrollmentApplyService) {
+    public EnrollmentController(
+        EnrollmentApplyService enrollmentApplyService,
+        EnrollmentConfirmService enrollmentConfirmService
+    ) {
         this.enrollmentApplyService = enrollmentApplyService;
+        this.enrollmentConfirmService = enrollmentConfirmService;
     }
 
     @PostMapping
@@ -30,5 +37,13 @@ public class EnrollmentController {
 
         return ResponseEntity.created(URI.create("/api/enrollments/" + response.id()))
             .body(response);
+    }
+
+    @PostMapping("/{enrollmentId}/confirm")
+    public EnrollmentResponse confirm(
+        @PathVariable Long enrollmentId,
+        @CurrentUser CurrentUserInfo user
+    ) {
+        return EnrollmentResponse.from(enrollmentConfirmService.confirm(enrollmentId, user));
     }
 }
