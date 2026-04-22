@@ -1,4 +1,7 @@
 package com.example.be_a.class_.domain;
+
+import com.example.be_a.global.error.ApiException;
+import com.example.be_a.global.error.ErrorCode;
 import com.example.be_a.global.support.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -103,5 +106,19 @@ public class ClassEntity extends BaseEntity {
         if (command.hasEndDate()) {
             this.endDate = command.endDate();
         }
+    }
+
+    public void changeStatus(ClassStatus targetStatus) {
+        if (status == ClassStatus.DRAFT && targetStatus == ClassStatus.OPEN) {
+            this.status = targetStatus;
+            return;
+        }
+
+        if (status == ClassStatus.OPEN && targetStatus == ClassStatus.CLOSED) {
+            this.status = targetStatus;
+            return;
+        }
+
+        throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
     }
 }
