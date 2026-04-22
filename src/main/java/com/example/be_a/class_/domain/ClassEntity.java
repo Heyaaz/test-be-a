@@ -1,5 +1,4 @@
 package com.example.be_a.class_.domain;
-
 import com.example.be_a.global.support.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -83,5 +82,26 @@ public class ClassEntity extends BaseEntity {
         LocalDate endDate
     ) {
         return new ClassEntity(creatorId, title, description, price, capacity, startDate, endDate, ClassStatus.DRAFT);
+    }
+
+    public void applyUpdate(UpdateClassCommand command) {
+        if (command.hasTitle()) {
+            this.title = command.title();
+        }
+        if (command.hasDescription()) {
+            this.description = command.description();
+        }
+        if (command.hasPrice()) {
+            this.price = command.price();
+        }
+        if (command.hasCapacity()) {
+            this.capacity = command.capacity();
+        }
+        if (command.hasStartDate()) {
+            this.startDate = command.startDate();
+        }
+        if (command.hasEndDate()) {
+            this.endDate = command.endDate();
+        }
     }
 }
