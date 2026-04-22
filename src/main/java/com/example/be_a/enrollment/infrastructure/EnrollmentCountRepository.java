@@ -18,6 +18,20 @@ public class EnrollmentCountRepository {
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
+    public long countByClassId(Long classId) {
+        String sql = """
+            SELECT COUNT(*)
+            FROM enrollments
+            WHERE class_id = :classId
+            """;
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+            .addValue("classId", classId);
+
+        Long count = namedParameterJdbcTemplate.queryForObject(sql, parameters, Long.class);
+        return count == null ? 0L : count;
+    }
+
     public Map<Long, Long> countWaitingByClassIds(List<Long> classIds) {
         if (classIds.isEmpty()) {
             return Map.of();

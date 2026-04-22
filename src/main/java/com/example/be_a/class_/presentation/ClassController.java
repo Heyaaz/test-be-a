@@ -1,6 +1,7 @@
 package com.example.be_a.class_.presentation;
 
 import com.example.be_a.class_.application.ClassCreateService;
+import com.example.be_a.class_.application.ClassDeleteService;
 import com.example.be_a.class_.application.ClassReadService;
 import com.example.be_a.class_.application.ClassStatusChangeService;
 import com.example.be_a.class_.application.ClassUpdateService;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,17 +34,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class ClassController {
 
     private final ClassCreateService classCreateService;
+    private final ClassDeleteService classDeleteService;
     private final ClassReadService classReadService;
     private final ClassUpdateService classUpdateService;
     private final ClassStatusChangeService classStatusChangeService;
 
     public ClassController(
         ClassCreateService classCreateService,
+        ClassDeleteService classDeleteService,
         ClassReadService classReadService,
         ClassUpdateService classUpdateService,
         ClassStatusChangeService classStatusChangeService
     ) {
         this.classCreateService = classCreateService;
+        this.classDeleteService = classDeleteService;
         this.classReadService = classReadService;
         this.classUpdateService = classUpdateService;
         this.classStatusChangeService = classStatusChangeService;
@@ -73,6 +78,15 @@ public class ClassController {
         @Valid @RequestBody UpdateClassRequest request
     ) {
         return ClassDetailResponse.from(classUpdateService.update(classId, user, request.toCommand()));
+    }
+
+    @DeleteMapping("/{classId}")
+    public ResponseEntity<Void> delete(
+        @PathVariable Long classId,
+        @CurrentUser CurrentUserInfo user
+    ) {
+        classDeleteService.delete(classId, user);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{classId}/status")
