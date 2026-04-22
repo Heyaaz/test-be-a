@@ -2,6 +2,7 @@ package com.example.be_a.class_.presentation;
 
 import com.example.be_a.class_.application.ClassCreateService;
 import com.example.be_a.class_.application.ClassReadService;
+import com.example.be_a.class_.application.ClassUpdateService;
 import com.example.be_a.class_.domain.ClassEntity;
 import com.example.be_a.class_.domain.ClassStatus;
 import com.example.be_a.global.config.CurrentUser;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,10 +32,16 @@ public class ClassController {
 
     private final ClassCreateService classCreateService;
     private final ClassReadService classReadService;
+    private final ClassUpdateService classUpdateService;
 
-    public ClassController(ClassCreateService classCreateService, ClassReadService classReadService) {
+    public ClassController(
+        ClassCreateService classCreateService,
+        ClassReadService classReadService,
+        ClassUpdateService classUpdateService
+    ) {
         this.classCreateService = classCreateService;
         this.classReadService = classReadService;
+        this.classUpdateService = classUpdateService;
     }
 
     @GetMapping
@@ -52,6 +60,15 @@ public class ClassController {
     @GetMapping("/{classId}")
     public ClassDetailResponse get(@PathVariable Long classId) {
         return ClassDetailResponse.from(classReadService.get(classId));
+    }
+
+    @PatchMapping("/{classId}")
+    public ClassDetailResponse update(
+        @PathVariable Long classId,
+        @CurrentUser CurrentUserInfo user,
+        @Valid @RequestBody UpdateClassRequest request
+    ) {
+        return ClassDetailResponse.from(classUpdateService.update(classId, user, request.toCommand()));
     }
 
     @PostMapping
