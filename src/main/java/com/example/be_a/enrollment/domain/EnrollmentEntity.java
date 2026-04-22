@@ -1,5 +1,7 @@
 package com.example.be_a.enrollment.domain;
 
+import com.example.be_a.global.error.ApiException;
+import com.example.be_a.global.error.ErrorCode;
 import com.example.be_a.global.support.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -62,5 +64,13 @@ public class EnrollmentEntity extends BaseEntity {
 
     public static EnrollmentEntity createWaiting(Long classId, Long userId) {
         return new EnrollmentEntity(classId, userId, EnrollmentStatus.WAITING);
+    }
+
+    public void confirm(LocalDateTime confirmedAt) {
+        if (status != EnrollmentStatus.PENDING) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
+        this.status = EnrollmentStatus.CONFIRMED;
+        this.confirmedAt = confirmedAt;
     }
 }
