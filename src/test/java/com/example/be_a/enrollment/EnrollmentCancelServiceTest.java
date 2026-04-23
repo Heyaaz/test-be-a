@@ -78,12 +78,31 @@ class EnrollmentCancelServiceTest {
 
         when(enrollmentRepository.findById(1L)).thenReturn(Optional.of(enrollment));
         when(classRepository.tryDecrementEnrolled(10L)).thenReturn(1);
+        givenOpenClassWithoutWaiting();
 
         EnrollmentEntity cancelled = enrollmentCancelService.cancel(1L, user);
 
         assertThat(cancelled.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
         assertThat(cancelled.getCancelledAt()).isNotNull();
         verify(classRepository).tryDecrementEnrolled(10L);
+        verify(classRepository, never()).tryIncrementEnrolled(10L);
+    }
+
+    @Test
+    void PENDING_취소_후_WAITING이_있으면_가장_오래된_대기자를_승급한다() {
+        EnrollmentEntity enrollment = pendingEnrollment();
+        CurrentUserInfo user = studentUser(20L);
+
+        when(enrollmentRepository.findById(1L)).thenReturn(Optional.of(enrollment));
+        when(classRepository.tryDecrementEnrolled(10L)).thenReturn(1);
+        when(enrollmentRepository.tryPromoteOldestWaiting(10L)).thenReturn(1);
+        when(classRepository.tryIncrementEnrolled(10L)).thenReturn(1);
+
+        EnrollmentEntity cancelled = enrollmentCancelService.cancel(1L, user);
+
+        assertThat(cancelled.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+        verify(enrollmentRepository).tryPromoteOldestWaiting(10L);
+        verify(classRepository).tryIncrementEnrolled(10L);
     }
 
     @Test
@@ -93,6 +112,7 @@ class EnrollmentCancelServiceTest {
 
         when(enrollmentRepository.findById(1L)).thenReturn(Optional.of(enrollment));
         when(classRepository.tryDecrementEnrolled(10L)).thenReturn(1);
+        givenOpenClassWithoutWaiting();
 
         EnrollmentEntity cancelled = enrollmentCancelService.cancel(1L, user);
 
@@ -108,6 +128,7 @@ class EnrollmentCancelServiceTest {
 
         when(enrollmentRepository.findById(1L)).thenReturn(Optional.of(enrollment));
         when(classRepository.tryDecrementEnrolled(10L)).thenReturn(1);
+        givenOpenClassWithoutWaiting();
 
         EnrollmentEntity cancelled = enrollmentCancelService.cancel(1L, user);
 
@@ -190,6 +211,10 @@ class EnrollmentCancelServiceTest {
             .isEqualTo(ErrorCode.CONFLICT_RETRY);
 
         verify(classRepository, never()).tryDecrementEnrolled(10L);
+    }
+
+    private void givenOpenClassWithoutWaiting() {
+        when(enrollmentRepository.tryPromoteOldestWaiting(10L)).thenReturn(0);
     }
 
     private CurrentUserInfo studentUser(Long userId) {
