@@ -1,5 +1,6 @@
 package com.example.be_a.enrollment.domain;
 
+import com.example.be_a.enrollment.application.ClassEnrollmentSummaryView;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,6 +15,61 @@ public interface EnrollmentRepository extends JpaRepository<EnrollmentEntity, Lo
     Page<EnrollmentEntity> findAllByUserId(Long userId, Pageable pageable);
 
     Page<EnrollmentEntity> findAllByUserIdAndStatus(Long userId, EnrollmentStatus status, Pageable pageable);
+
+    @Query(
+        value = """
+            SELECT new com.example.be_a.enrollment.application.ClassEnrollmentSummaryView(
+                e.id,
+                u.id,
+                u.name,
+                e.status,
+                e.requestedAt,
+                e.confirmedAt,
+                e.cancelledAt
+            )
+            FROM EnrollmentEntity e
+            JOIN UserEntity u ON e.userId = u.id
+            WHERE e.classId = :classId
+            """,
+        countQuery = """
+            SELECT COUNT(e)
+            FROM EnrollmentEntity e
+            WHERE e.classId = :classId
+            """
+    )
+    Page<ClassEnrollmentSummaryView> findClassEnrollmentsByClassId(
+        @Param("classId") Long classId,
+        Pageable pageable
+    );
+
+    @Query(
+        value = """
+            SELECT new com.example.be_a.enrollment.application.ClassEnrollmentSummaryView(
+                e.id,
+                u.id,
+                u.name,
+                e.status,
+                e.requestedAt,
+                e.confirmedAt,
+                e.cancelledAt
+            )
+            FROM EnrollmentEntity e
+            JOIN UserEntity u ON e.userId = u.id
+            WHERE e.classId = :classId
+              AND e.status = :status
+            """,
+        countQuery = """
+            SELECT COUNT(e)
+            FROM EnrollmentEntity e
+            WHERE e.classId = :classId
+              AND e.status = :status
+            """
+    )
+    Page<ClassEnrollmentSummaryView> findClassEnrollmentsByClassIdAndStatus(
+        @Param("classId") Long classId,
+        @Param("status") EnrollmentStatus status,
+        Pageable pageable
+    );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """

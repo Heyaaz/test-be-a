@@ -2,11 +2,14 @@ package com.example.be_a.class_.presentation;
 
 import com.example.be_a.class_.application.ClassCreateService;
 import com.example.be_a.class_.application.ClassDeleteService;
+import com.example.be_a.class_.application.ClassEnrollmentReadService;
 import com.example.be_a.class_.application.ClassReadService;
 import com.example.be_a.class_.application.ClassStatusChangeService;
 import com.example.be_a.class_.application.ClassUpdateService;
 import com.example.be_a.class_.domain.ClassEntity;
 import com.example.be_a.class_.domain.ClassStatus;
+import com.example.be_a.enrollment.application.ClassEnrollmentSummaryView;
+import com.example.be_a.enrollment.domain.EnrollmentStatus;
 import com.example.be_a.global.config.CurrentUser;
 import com.example.be_a.global.support.PageResponse;
 import com.example.be_a.user.application.CurrentUserInfo;
@@ -35,6 +38,7 @@ public class ClassController {
 
     private final ClassCreateService classCreateService;
     private final ClassDeleteService classDeleteService;
+    private final ClassEnrollmentReadService classEnrollmentReadService;
     private final ClassReadService classReadService;
     private final ClassUpdateService classUpdateService;
     private final ClassStatusChangeService classStatusChangeService;
@@ -42,12 +46,14 @@ public class ClassController {
     public ClassController(
         ClassCreateService classCreateService,
         ClassDeleteService classDeleteService,
+        ClassEnrollmentReadService classEnrollmentReadService,
         ClassReadService classReadService,
         ClassUpdateService classUpdateService,
         ClassStatusChangeService classStatusChangeService
     ) {
         this.classCreateService = classCreateService;
         this.classDeleteService = classDeleteService;
+        this.classEnrollmentReadService = classEnrollmentReadService;
         this.classReadService = classReadService;
         this.classUpdateService = classUpdateService;
         this.classStatusChangeService = classStatusChangeService;
@@ -69,6 +75,23 @@ public class ClassController {
     @GetMapping("/{classId}")
     public ClassDetailResponse get(@PathVariable Long classId) {
         return ClassDetailResponse.from(classReadService.get(classId));
+    }
+
+    @GetMapping("/{classId}/enrollments")
+    public PageResponse<ClassEnrollmentSummaryView> listEnrollments(
+        @PathVariable Long classId,
+        @CurrentUser CurrentUserInfo user,
+        @RequestParam(required = false) EnrollmentStatus status,
+        @RequestParam(defaultValue = "0") @Min(value = 0, message = "페이지는 0 이상이어야 합니다.") int page,
+        @RequestParam(defaultValue = "20") @Min(value = 1, message = "size는 1 이상이어야 합니다.")
+        @Max(value = 100, message = "size는 100 이하여야 합니다.") int size
+    ) {
+        return PageResponse.of(classEnrollmentReadService.listByClass(
+            classId,
+            user,
+            status,
+            PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "requestedAt").and(Sort.by(Sort.Direction.ASC, "id")))
+        ));
     }
 
     @PatchMapping("/{classId}")
