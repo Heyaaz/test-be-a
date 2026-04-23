@@ -39,6 +39,16 @@ class FlywayMigrationIntegrationTest extends MySqlTestContainerSupport {
                     'chk_enrollments_confirmed_at',
                     'chk_enrollments_cancelled_at'
                   )
+            """,
+            Integer.class
+        );
+        Integer enrollmentMyListIndexes = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM information_schema.statistics
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'enrollments'
+                  AND index_name = 'idx_enrollments_user_status_id_desc'
                 """,
             Integer.class
         );
@@ -46,5 +56,6 @@ class FlywayMigrationIntegrationTest extends MySqlTestContainerSupport {
         assertThat(managedTables).isEqualTo(4);
         assertThat(userCount).isEqualTo(3);
         assertThat(enrollmentCheckConstraints).isEqualTo(2);
+        assertThat(enrollmentMyListIndexes).isGreaterThan(0);
     }
 }
