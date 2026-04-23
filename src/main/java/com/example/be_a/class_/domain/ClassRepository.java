@@ -20,4 +20,13 @@ public interface ClassRepository extends JpaRepository<ClassEntity, Long> {
           AND enrolled_count < capacity
         """, nativeQuery = true)
     int tryIncrementEnrolled(@Param("id") Long id);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+        UPDATE classes
+        SET enrolled_count = enrolled_count - 1
+        WHERE id = :id
+          AND enrolled_count > 0
+        """, nativeQuery = true)
+    int tryDecrementEnrolled(@Param("id") Long id);
 }

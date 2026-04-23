@@ -1,6 +1,7 @@
 package com.example.be_a.enrollment.presentation;
 
 import com.example.be_a.enrollment.application.EnrollmentApplyService;
+import com.example.be_a.enrollment.application.EnrollmentCancelService;
 import com.example.be_a.enrollment.application.EnrollmentConfirmService;
 import com.example.be_a.global.config.CurrentUser;
 import com.example.be_a.user.application.CurrentUserInfo;
@@ -19,13 +20,16 @@ public class EnrollmentController {
 
     private final EnrollmentApplyService enrollmentApplyService;
     private final EnrollmentConfirmService enrollmentConfirmService;
+    private final EnrollmentCancelService enrollmentCancelService;
 
     public EnrollmentController(
         EnrollmentApplyService enrollmentApplyService,
-        EnrollmentConfirmService enrollmentConfirmService
+        EnrollmentConfirmService enrollmentConfirmService,
+        EnrollmentCancelService enrollmentCancelService
     ) {
         this.enrollmentApplyService = enrollmentApplyService;
         this.enrollmentConfirmService = enrollmentConfirmService;
+        this.enrollmentCancelService = enrollmentCancelService;
     }
 
     @PostMapping
@@ -45,5 +49,13 @@ public class EnrollmentController {
         @CurrentUser CurrentUserInfo user
     ) {
         return EnrollmentResponse.from(enrollmentConfirmService.confirm(enrollmentId, user));
+    }
+
+    @PostMapping("/{enrollmentId}/cancel")
+    public EnrollmentResponse cancel(
+        @PathVariable Long enrollmentId,
+        @CurrentUser CurrentUserInfo user
+    ) {
+        return EnrollmentResponse.from(enrollmentCancelService.cancel(enrollmentId, user));
     }
 }
