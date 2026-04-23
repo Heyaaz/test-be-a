@@ -46,7 +46,7 @@ public class EnrollmentCancelService {
             return enrollment;
         }
 
-        restoreCapacity(enrollment.getClassId());
+        restoreCapacityAndPromote(enrollment.getClassId());
         return enrollment;
     }
 
@@ -69,6 +69,21 @@ public class EnrollmentCancelService {
     private void restoreCapacity(Long classId) {
         if (classRepository.tryDecrementEnrolled(classId) == 0) {
             throw new IllegalStateException("수강 인원 복구에 실패했습니다. classId=" + classId);
+        }
+    }
+
+    private void restoreCapacityAndPromote(Long classId) {
+        restoreCapacity(classId);
+        promoteOldestWaiting(classId);
+    }
+
+    private void promoteOldestWaiting(Long classId) {
+        if (enrollmentRepository.tryPromoteOldestWaiting(classId) == 0) {
+            return;
+        }
+
+        if (classRepository.tryIncrementEnrolled(classId) == 0) {
+            throw new IllegalStateException("승급 좌석 재할당에 실패했습니다. classId=" + classId);
         }
     }
 }
