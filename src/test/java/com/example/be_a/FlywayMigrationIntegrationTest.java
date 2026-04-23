@@ -28,8 +28,23 @@ class FlywayMigrationIntegrationTest extends MySqlTestContainerSupport {
             Integer.class
         );
         Integer userCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users", Integer.class);
+        Integer enrollmentCheckConstraints = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM information_schema.table_constraints
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'enrollments'
+                  AND constraint_type = 'CHECK'
+                  AND constraint_name IN (
+                    'chk_enrollments_confirmed_at',
+                    'chk_enrollments_cancelled_at'
+                  )
+                """,
+            Integer.class
+        );
 
         assertThat(managedTables).isEqualTo(4);
         assertThat(userCount).isEqualTo(3);
+        assertThat(enrollmentCheckConstraints).isEqualTo(2);
     }
 }

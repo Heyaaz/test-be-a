@@ -9,6 +9,7 @@ import com.example.be_a.class_.domain.ClassEntity;
 import com.example.be_a.class_.domain.ClassRepository;
 import com.example.be_a.class_.domain.ClassStatus;
 import com.example.be_a.enrollment.domain.EnrollmentStatus;
+import java.time.LocalDateTime;
 import com.example.be_a.support.MySqlTestContainerSupport;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
@@ -141,8 +142,14 @@ class ClassDeleteIntegrationTest extends MySqlTestContainerSupport {
 
     private void insertEnrollment(Long classId, Long userId, EnrollmentStatus status) {
         jdbcTemplate.update("""
-            INSERT INTO enrollments (class_id, user_id, status)
-            VALUES (?, ?, ?)
-            """, classId, userId, status.name());
+            INSERT INTO enrollments (class_id, user_id, status, confirmed_at, cancelled_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            classId,
+            userId,
+            status.name(),
+            status == EnrollmentStatus.CONFIRMED ? LocalDateTime.of(2026, 4, 23, 10, 0) : null,
+            status == EnrollmentStatus.CANCELLED ? LocalDateTime.of(2026, 4, 23, 11, 0) : null
+        );
     }
 }

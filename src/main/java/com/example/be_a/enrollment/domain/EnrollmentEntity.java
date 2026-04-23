@@ -73,4 +73,24 @@ public class EnrollmentEntity extends BaseEntity {
         this.status = EnrollmentStatus.CONFIRMED;
         this.confirmedAt = confirmedAt;
     }
+
+    public void cancel(LocalDateTime cancelledAt) {
+        if (status == EnrollmentStatus.CANCELLED) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
+
+        if (status == EnrollmentStatus.CONFIRMED && isCancelPeriodExpired(cancelledAt)) {
+            throw new ApiException(ErrorCode.CANCEL_PERIOD_EXPIRED);
+        }
+
+        this.status = EnrollmentStatus.CANCELLED;
+        this.cancelledAt = cancelledAt;
+    }
+
+    private boolean isCancelPeriodExpired(LocalDateTime cancelledAt) {
+        if (confirmedAt == null) {
+            throw new IllegalStateException("결제 확정 시각이 없습니다. enrollmentId=" + id);
+        }
+        return cancelledAt.isAfter(confirmedAt.plusDays(7));
+    }
 }
