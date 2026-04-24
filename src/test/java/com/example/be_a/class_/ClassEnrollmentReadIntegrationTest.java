@@ -77,6 +77,39 @@ class ClassEnrollmentReadIntegrationTest extends MySqlTestContainerSupport {
     }
 
     @Test
+    void 같은_사용자가_취소_후_재신청하면_최신_수강_신청만_목록에_노출한다() throws Exception {
+        ClassEntity classEntity = saveOpenClass(10L, "재신청 목록 강의");
+        insertEnrollmentAt(classEntity.getId(), 30L, EnrollmentStatus.CANCELLED, FIXED_NOW.minusMinutes(2));
+        Long reappliedId = insertEnrollmentAt(
+            classEntity.getId(),
+            30L,
+            EnrollmentStatus.PENDING,
+            FIXED_NOW.minusMinutes(1)
+        );
+
+        mockMvc.perform(get("/api/classes/{classId}/enrollments", classEntity.getId())
+                .header("X-User-Id", "10"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].enrollmentId").value(reappliedId))
+            .andExpect(jsonPath("$.items[0].userId").value(30))
+            .andExpect(jsonPath("$.items[0].status").value("PENDING"));
+
+        mockMvc.perform(get("/api/classes/{classId}/enrollments", classEntity.getId())
+                .header("X-User-Id", "10")
+                .param("status", "CANCELLED"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(0));
+
+        mockMvc.perform(get("/api/classes/{classId}/enrollments", classEntity.getId())
+                .header("X-User-Id", "10")
+                .param("status", "PENDING"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].enrollmentId").value(reappliedId));
+    }
+
+    @Test
     void 다른_크리에이터_강의는_FORBIDDEN을_반환한다() throws Exception {
         ClassEntity classEntity = saveOpenClass(20L, "다른 사람 강의");
 
@@ -208,7 +241,7 @@ class ClassEnrollmentReadIntegrationTest extends MySqlTestContainerSupport {
         );
 
         return jdbcTemplate.queryForObject(
-            "SELECT id FROM enrollments WHERE class_id = ? AND user_id = ?",
+            "SELECT id FROM enrollments WHERE class_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1",
             Long.class,
             classId,
             userId
