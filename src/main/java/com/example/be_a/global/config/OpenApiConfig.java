@@ -13,6 +13,6 @@ public class OpenApiConfig {
         return new OpenAPI().info(new Info()
             .title("BE-A Enrollment API")
             .version("v1")
-            .description("수강 신청 시스템 과제용 초기 API 문서 설정입니다."));
+            .description("강의 관리, 수강 신청, 결제 확정, 취소, 대기열 승급을 다루는 API 문서입니다. 인증은 X-User-Id 헤더로 단순화했습니다."));
     }
 }

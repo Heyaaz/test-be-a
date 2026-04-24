@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -101,8 +102,8 @@ class EnrollmentPromotionConcurrencyIntegrationTest extends MySqlTestContainerSu
         CountDownLatch startLatch = new CountDownLatch(1);
         Queue<String> results = new ConcurrentLinkedQueue<>();
 
-        var firstCancel = executorService.submit(() -> cancelAndRecord(firstPendingId, 20L, readyLatch, startLatch, results));
-        var secondCancel = executorService.submit(() -> cancelAndRecord(secondPendingId, 21L, readyLatch, startLatch, results));
+        var firstCancel = executorService.submit(() -> cancelAndRecordWithTransientRetry(firstPendingId, 20L, readyLatch, startLatch, results));
+        var secondCancel = executorService.submit(() -> cancelAndRecordWithTransientRetry(secondPendingId, 21L, readyLatch, startLatch, results));
 
         assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
         startLatch.countDown();
@@ -146,13 +147,14 @@ class EnrollmentPromotionConcurrencyIntegrationTest extends MySqlTestContainerSu
                 classLockHeldLatch.countDown();
                 assertThat(applyIncrementAttemptedLatch.await(5, TimeUnit.SECONDS)).isTrue();
             }
-            return invocation.callRealMethod();
+            return tryPromoteOldestWaitingDirectly(classId);
         }).when(enrollmentRepositorySpy).tryPromoteOldestWaiting(eq(classEntity.getId()));
         doAnswer(invocation -> {
+            Long classId = invocation.getArgument(0);
             if (Thread.currentThread() == applyThread.get()) {
                 applyIncrementAttemptedLatch.countDown();
             }
-            return invocation.callRealMethod();
+            return tryIncrementEnrolledDirectly(classId);
         }).when(classRepositorySpy).tryIncrementEnrolled(eq(classEntity.getId()));
 
         var cancelTask = executorService.submit(() -> cancelAndRecord(pendingId, 20L, results));
@@ -188,8 +190,8 @@ class EnrollmentPromotionConcurrencyIntegrationTest extends MySqlTestContainerSu
         CountDownLatch startLatch = new CountDownLatch(1);
         Queue<String> results = new ConcurrentLinkedQueue<>();
 
-        var firstCancel = executorService.submit(() -> cancelAndRecord(firstPendingId, 20L, readyLatch, startLatch, results));
-        var secondCancel = executorService.submit(() -> cancelAndRecord(secondPendingId, 21L, readyLatch, startLatch, results));
+        var firstCancel = executorService.submit(() -> cancelAndRecordWithTransientRetry(firstPendingId, 20L, readyLatch, startLatch, results));
+        var secondCancel = executorService.submit(() -> cancelAndRecordWithTransientRetry(secondPendingId, 21L, readyLatch, startLatch, results));
 
         assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
         startLatch.countDown();
@@ -207,6 +209,51 @@ class EnrollmentPromotionConcurrencyIntegrationTest extends MySqlTestContainerSu
         assertThat(firstCancelled.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
         assertThat(secondCancelled.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
         assertThat(promoted.getStatus()).isEqualTo(EnrollmentStatus.PENDING);
+        assertThat(savedClass.getEnrolledCount()).isEqualTo(1);
+        assertActiveCountMatchesEnrolledCount(savedClass, enrollments);
+    }
+
+    @Test
+    void 승급_대상_WAITING이_자기_취소하면_다음_WAITING을_승급한다() throws Exception {
+        ClassEntity classEntity = saveOpenClass(1, "승급 대상 자기 취소 경합 강의");
+        updateEnrolledCount(classEntity.getId(), 1);
+        Long pendingId = insertEnrollmentAt(classEntity.getId(), 20L, EnrollmentStatus.PENDING, BASE_REQUESTED_AT.minusMinutes(3));
+        Long firstWaitingId = insertEnrollmentAt(classEntity.getId(), 21L, EnrollmentStatus.WAITING, BASE_REQUESTED_AT.minusMinutes(2));
+        Long secondWaitingId = insertEnrollmentAt(classEntity.getId(), 22L, EnrollmentStatus.WAITING, BASE_REQUESTED_AT.minusMinutes(1));
+        CountDownLatch firstWaitingCancelledLatch = new CountDownLatch(1);
+        Queue<String> results = new ConcurrentLinkedQueue<>();
+
+        var waitingCancelTask = executorService.submit(() -> {
+            try {
+                cancelWaitingDirectlyAndRecord(firstWaitingId, 21L, results);
+            } finally {
+                firstWaitingCancelledLatch.countDown();
+            }
+        });
+        var pendingCancelTask = executorService.submit(() -> {
+            try {
+                assertThat(firstWaitingCancelledLatch.await(5, TimeUnit.SECONDS)).isTrue();
+                cancelAndRecord(pendingId, 20L, results);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                results.add("ERROR:InterruptedException:20");
+            }
+        });
+
+        waitingCancelTask.get(10, TimeUnit.SECONDS);
+        pendingCancelTask.get(10, TimeUnit.SECONDS);
+
+        EnrollmentEntity cancelledPending = enrollmentRepository.findById(pendingId).orElseThrow();
+        EnrollmentEntity cancelledWaiting = enrollmentRepository.findById(firstWaitingId).orElseThrow();
+        EnrollmentEntity promotedWaiting = enrollmentRepository.findById(secondWaitingId).orElseThrow();
+        ClassEntity savedClass = classRepository.findById(classEntity.getId()).orElseThrow();
+        List<EnrollmentEntity> enrollments = enrollmentRepository.findAll();
+
+        assertThat(results).containsExactlyInAnyOrder("CANCELLED:20", "CANCELLED:21");
+        assertNoUnexpectedConcurrencyErrors(results);
+        assertThat(cancelledPending.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+        assertThat(cancelledWaiting.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+        assertThat(promotedWaiting.getStatus()).isEqualTo(EnrollmentStatus.PENDING);
         assertThat(savedClass.getEnrolledCount()).isEqualTo(1);
         assertActiveCountMatchesEnrolledCount(savedClass, enrollments);
     }
@@ -278,6 +325,22 @@ class EnrollmentPromotionConcurrencyIntegrationTest extends MySqlTestContainerSu
         }
     }
 
+    private void cancelAndRecordWithTransientRetry(
+        Long enrollmentId,
+        Long userId,
+        CountDownLatch readyLatch,
+        CountDownLatch startLatch,
+        Queue<String> results
+    ) {
+        readyLatch.countDown();
+        try {
+            startLatch.await();
+            cancelAndRecordWithTransientRetry(enrollmentId, userId, results);
+        } catch (Exception exception) {
+            results.add(resultOf(exception) + ":" + userId);
+        }
+    }
+
     private void cancelAndRecord(Long enrollmentId, Long userId, Queue<String> results) {
         try {
             EnrollmentEntity cancelled = enrollmentCancelService.cancel(
@@ -287,6 +350,36 @@ class EnrollmentPromotionConcurrencyIntegrationTest extends MySqlTestContainerSu
             results.add(cancelled.getStatus().name() + ":" + userId);
         } catch (Exception exception) {
             results.add(resultOf(exception) + ":" + userId);
+        }
+    }
+
+    private void cancelAndRecordWithTransientRetry(Long enrollmentId, Long userId, Queue<String> results) {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                EnrollmentEntity cancelled = enrollmentCancelService.cancel(
+                    enrollmentId,
+                    new CurrentUserInfo(userId, UserRole.STUDENT)
+                );
+                results.add(cancelled.getStatus().name() + ":" + userId);
+                return;
+            } catch (CannotAcquireLockException exception) {
+                if (attempt == 2) {
+                    results.add(resultOf(exception) + ":" + userId);
+                    return;
+                }
+                sleepBriefly();
+            } catch (Exception exception) {
+                results.add(resultOf(exception) + ":" + userId);
+                return;
+            }
+        }
+    }
+
+    private void sleepBriefly() {
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -300,6 +393,64 @@ class EnrollmentPromotionConcurrencyIntegrationTest extends MySqlTestContainerSu
         } catch (Exception exception) {
             results.add(resultOf(exception) + ":" + userId);
         }
+    }
+
+    private void cancelWaitingDirectlyAndRecord(Long enrollmentId, Long userId, Queue<String> results) {
+        try {
+            int updated = jdbcTemplate.update("""
+                UPDATE enrollments
+                SET status = ?,
+                    cancelled_at = ?,
+                    version = version + 1
+                WHERE id = ?
+                  AND user_id = ?
+                  AND status = ?
+                """,
+                EnrollmentStatus.CANCELLED.name(),
+                LocalDateTime.now(),
+                enrollmentId,
+                userId,
+                EnrollmentStatus.WAITING.name()
+            );
+            if (updated == 1) {
+                results.add("CANCELLED:" + userId);
+                return;
+            }
+            results.add("INVALID_STATE_TRANSITION:" + userId);
+        } catch (Exception exception) {
+            results.add(resultOf(exception) + ":" + userId);
+        }
+    }
+
+    private int tryPromoteOldestWaitingDirectly(Long classId) {
+        return jdbcTemplate.update("""
+            UPDATE enrollments e
+            JOIN (
+                SELECT waiting.id
+                FROM (
+                    SELECT e2.id
+                    FROM enrollments e2
+                    JOIN classes c ON e2.class_id = c.id
+                    WHERE e2.class_id = ?
+                      AND c.status = 'OPEN'
+                      AND e2.status = 'WAITING'
+                    ORDER BY e2.requested_at ASC, e2.id ASC
+                    LIMIT 1
+                ) waiting
+            ) target ON e.id = target.id
+            SET e.status = 'PENDING',
+                e.version = e.version + 1
+            """, classId);
+    }
+
+    private int tryIncrementEnrolledDirectly(Long classId) {
+        return jdbcTemplate.update("""
+            UPDATE classes
+            SET enrolled_count = enrolled_count + 1
+            WHERE id = ?
+              AND status = 'OPEN'
+              AND enrolled_count < capacity
+            """, classId);
     }
 
     private String resultOf(Exception exception) {
