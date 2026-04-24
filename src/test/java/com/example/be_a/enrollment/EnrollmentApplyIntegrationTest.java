@@ -95,6 +95,92 @@ class EnrollmentApplyIntegrationTest extends MySqlTestContainerSupport {
     }
 
     @Test
+    void CANCELLED_이력이_있는_사용자는_같은_강의를_다시_신청할_수_있다() throws Exception {
+        ClassEntity classEntity = saveOpenClass(10L, 1, "재신청 가능 강의");
+        apply(classEntity.getId(), 20L, false);
+        cancel(latestEnrollmentId(classEntity.getId(), 20L), 20L);
+
+        mockMvc.perform(post("/api/enrollments")
+                .header("X-User-Id", "20")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(classEntity.getId(), false)))
+            .andExpect(status().isCreated())
+            .andExpect(header().string("Location", matchesPattern("/api/enrollments/\\d+")))
+            .andExpect(jsonPath("$.classId").value(classEntity.getId()))
+            .andExpect(jsonPath("$.userId").value(20))
+            .andExpect(jsonPath("$.status").value("PENDING"));
+
+        ClassEntity savedClass = classRepository.findById(classEntity.getId()).orElseThrow();
+        List<EnrollmentEntity> enrollments = enrollmentRepository.findAll();
+
+        assertThat(savedClass.getEnrolledCount()).isEqualTo(1);
+        assertThat(enrollments).hasSize(2);
+        assertThat(enrollments)
+            .extracting(EnrollmentEntity::getStatus)
+            .containsExactlyInAnyOrder(EnrollmentStatus.CANCELLED, EnrollmentStatus.PENDING);
+    }
+
+    @Test
+    void WAITING_취소_이력이_있는_사용자는_같은_강의를_다시_신청할_수_있다() throws Exception {
+        ClassEntity classEntity = saveOpenClass(10L, 1, "대기 취소 후 재신청 강의");
+        apply(classEntity.getId(), 20L, false);
+        apply(classEntity.getId(), 21L, true);
+        cancel(latestEnrollmentId(classEntity.getId(), 21L), 21L);
+
+        mockMvc.perform(post("/api/enrollments")
+                .header("X-User-Id", "21")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(classEntity.getId(), true)))
+            .andExpect(status().isCreated())
+            .andExpect(header().string("Location", matchesPattern("/api/enrollments/\\d+")))
+            .andExpect(jsonPath("$.classId").value(classEntity.getId()))
+            .andExpect(jsonPath("$.userId").value(21))
+            .andExpect(jsonPath("$.status").value("WAITING"));
+
+        ClassEntity savedClass = classRepository.findById(classEntity.getId()).orElseThrow();
+        List<EnrollmentEntity> enrollments = enrollmentRepository.findAll();
+
+        assertThat(savedClass.getEnrolledCount()).isEqualTo(1);
+        assertThat(enrollments).hasSize(3);
+        assertThat(enrollments)
+            .extracting(EnrollmentEntity::getStatus)
+            .containsExactlyInAnyOrder(
+                EnrollmentStatus.PENDING,
+                EnrollmentStatus.CANCELLED,
+                EnrollmentStatus.WAITING
+            );
+    }
+
+    @Test
+    void 같은_사용자가_여러_번_취소_재신청해도_활성_신청은_하나만_유지된다() throws Exception {
+        ClassEntity classEntity = saveOpenClass(10L, 1, "반복 재신청 강의");
+        apply(classEntity.getId(), 20L, false);
+        cancel(latestEnrollmentId(classEntity.getId(), 20L), 20L);
+        apply(classEntity.getId(), 20L, false);
+        cancel(latestEnrollmentId(classEntity.getId(), 20L), 20L);
+
+        mockMvc.perform(post("/api/enrollments")
+                .header("X-User-Id", "20")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(classEntity.getId(), false)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("PENDING"));
+
+        ClassEntity savedClass = classRepository.findById(classEntity.getId()).orElseThrow();
+        List<EnrollmentEntity> enrollments = enrollmentRepository.findAll();
+
+        assertThat(savedClass.getEnrolledCount()).isEqualTo(1);
+        assertThat(enrollments).hasSize(3);
+        assertThat(enrollments)
+            .extracting(EnrollmentEntity::getStatus)
+            .containsExactlyInAnyOrder(
+                EnrollmentStatus.CANCELLED,
+                EnrollmentStatus.CANCELLED,
+                EnrollmentStatus.PENDING
+            );
+    }
+
+    @Test
     void DRAFT_강의는_CLASS_NOT_OPEN을_반환한다() throws Exception {
         ClassEntity classEntity = saveDraftClass(10L, 1, "초안 강의");
 
@@ -183,6 +269,22 @@ class EnrollmentApplyIntegrationTest extends MySqlTestContainerSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(requestBody(classId, waitlist)))
             .andExpect(status().isCreated());
+    }
+
+    private void cancel(Long enrollmentId, Long userId) throws Exception {
+        mockMvc.perform(post("/api/enrollments/{enrollmentId}/cancel", enrollmentId)
+                .header("X-User-Id", String.valueOf(userId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    private Long latestEnrollmentId(Long classId, Long userId) {
+        return jdbcTemplate.queryForObject(
+            "SELECT id FROM enrollments WHERE class_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1",
+            Long.class,
+            classId,
+            userId
+        );
     }
 
     private String requestBody(Long classId, boolean waitlist) {

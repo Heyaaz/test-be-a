@@ -46,12 +46,12 @@ class EnrollmentApplyServiceTest {
     void 저장_중_UNIQUE_예외가_나면_ALREADY_ENROLLED로_변환한다() {
         CurrentUserInfo user = studentUser(20L);
 
-        when(enrollmentRepository.existsByClassIdAndUserId(1L, 20L)).thenReturn(false);
+        when(enrollmentRepository.existsByClassIdAndUserIdAndStatusNot(1L, 20L, EnrollmentStatus.CANCELLED)).thenReturn(false);
         when(classRepository.tryIncrementEnrolled(1L)).thenReturn(1);
         when(enrollmentRepository.saveAndFlush(any()))
             .thenThrow(new DataIntegrityViolationException(
                 "duplicate key",
-                new ConstraintViolationException("duplicate key", null, "UK_ENROLLMENTS_CLASS_USER")
+                new ConstraintViolationException("duplicate key", null, "UK_ENROLLMENTS_CLASS_ACTIVE_USER")
             ));
 
         assertThatThrownBy(() -> enrollmentApplyService.apply(user, new ApplyEnrollmentCommand(1L, false)))
@@ -64,7 +64,7 @@ class EnrollmentApplyServiceTest {
     void UNIQUE가_아닌_무결성_예외는_그대로_전파한다() {
         CurrentUserInfo user = studentUser(20L);
 
-        when(enrollmentRepository.existsByClassIdAndUserId(1L, 20L)).thenReturn(false);
+        when(enrollmentRepository.existsByClassIdAndUserIdAndStatusNot(1L, 20L, EnrollmentStatus.CANCELLED)).thenReturn(false);
         when(classRepository.tryIncrementEnrolled(1L)).thenReturn(1);
         when(enrollmentRepository.saveAndFlush(any()))
             .thenThrow(new DataIntegrityViolationException(
@@ -80,7 +80,7 @@ class EnrollmentApplyServiceTest {
     void 중복_신청이면_정원_증가를_시도하지_않고_ALREADY_ENROLLED를_반환한다() {
         CurrentUserInfo user = studentUser(20L);
 
-        when(enrollmentRepository.existsByClassIdAndUserId(1L, 20L)).thenReturn(true);
+        when(enrollmentRepository.existsByClassIdAndUserIdAndStatusNot(1L, 20L, EnrollmentStatus.CANCELLED)).thenReturn(true);
 
         assertThatThrownBy(() -> enrollmentApplyService.apply(user, new ApplyEnrollmentCommand(1L, false)))
             .isInstanceOf(ApiException.class)
@@ -95,7 +95,7 @@ class EnrollmentApplyServiceTest {
     void 강의가_없으면_CLASS_NOT_FOUND를_반환한다() {
         CurrentUserInfo user = studentUser(20L);
 
-        when(enrollmentRepository.existsByClassIdAndUserId(1L, 20L)).thenReturn(false);
+        when(enrollmentRepository.existsByClassIdAndUserIdAndStatusNot(1L, 20L, EnrollmentStatus.CANCELLED)).thenReturn(false);
         when(classRepository.tryIncrementEnrolled(1L)).thenReturn(0);
         when(classRepository.findById(1L)).thenReturn(Optional.empty());
 
@@ -111,7 +111,7 @@ class EnrollmentApplyServiceTest {
     void 정원_증가_실패_후_강의가_CLOSED면_CLASS_NOT_OPEN을_반환한다() {
         CurrentUserInfo user = studentUser(20L);
 
-        when(enrollmentRepository.existsByClassIdAndUserId(1L, 20L)).thenReturn(false);
+        when(enrollmentRepository.existsByClassIdAndUserIdAndStatusNot(1L, 20L, EnrollmentStatus.CANCELLED)).thenReturn(false);
         when(classRepository.tryIncrementEnrolled(1L)).thenReturn(0);
         when(classRepository.findById(1L)).thenReturn(Optional.of(classWithStatus(10L, "마감 강의", ClassStatus.CLOSED)));
 
@@ -127,7 +127,7 @@ class EnrollmentApplyServiceTest {
     void 정원_증가_실패_후_WAITLIST를_사용하지_않으면_CLASS_FULL을_반환한다() {
         CurrentUserInfo user = studentUser(20L);
 
-        when(enrollmentRepository.existsByClassIdAndUserId(1L, 20L)).thenReturn(false);
+        when(enrollmentRepository.existsByClassIdAndUserIdAndStatusNot(1L, 20L, EnrollmentStatus.CANCELLED)).thenReturn(false);
         when(classRepository.tryIncrementEnrolled(1L)).thenReturn(0);
         when(classRepository.findById(1L)).thenReturn(Optional.of(classWithStatus(10L, "만석 강의", ClassStatus.OPEN)));
 
@@ -144,7 +144,7 @@ class EnrollmentApplyServiceTest {
         CurrentUserInfo user = studentUser(20L);
         ArgumentCaptor<EnrollmentEntity> enrollmentCaptor = ArgumentCaptor.forClass(EnrollmentEntity.class);
 
-        when(enrollmentRepository.existsByClassIdAndUserId(1L, 20L)).thenReturn(false);
+        when(enrollmentRepository.existsByClassIdAndUserIdAndStatusNot(1L, 20L, EnrollmentStatus.CANCELLED)).thenReturn(false);
         when(classRepository.tryIncrementEnrolled(1L)).thenReturn(0);
         when(classRepository.findById(1L)).thenReturn(Optional.of(classWithStatus(10L, "대기열 강의", ClassStatus.OPEN)));
         when(enrollmentRepository.saveAndFlush(any()))

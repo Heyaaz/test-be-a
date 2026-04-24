@@ -10,7 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface EnrollmentRepository extends JpaRepository<EnrollmentEntity, Long> {
 
-    boolean existsByClassIdAndUserId(Long classId, Long userId);
+    boolean existsByClassIdAndUserIdAndStatusNot(Long classId, Long userId, EnrollmentStatus status);
 
     Page<EnrollmentEntity> findAllByUserId(Long userId, Pageable pageable);
 
@@ -30,11 +30,31 @@ public interface EnrollmentRepository extends JpaRepository<EnrollmentEntity, Lo
             FROM EnrollmentEntity e
             JOIN UserEntity u ON e.userId = u.id
             WHERE e.classId = :classId
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM EnrollmentEntity newer
+                  WHERE newer.classId = e.classId
+                    AND newer.userId = e.userId
+                    AND (
+                        newer.requestedAt > e.requestedAt
+                        OR (newer.requestedAt = e.requestedAt AND newer.id > e.id)
+                    )
+              )
             """,
         countQuery = """
             SELECT COUNT(e)
             FROM EnrollmentEntity e
             WHERE e.classId = :classId
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM EnrollmentEntity newer
+                  WHERE newer.classId = e.classId
+                    AND newer.userId = e.userId
+                    AND (
+                        newer.requestedAt > e.requestedAt
+                        OR (newer.requestedAt = e.requestedAt AND newer.id > e.id)
+                    )
+              )
             """
     )
     Page<ClassEnrollmentSummaryView> findClassEnrollmentsByClassId(
@@ -57,12 +77,32 @@ public interface EnrollmentRepository extends JpaRepository<EnrollmentEntity, Lo
             JOIN UserEntity u ON e.userId = u.id
             WHERE e.classId = :classId
               AND e.status = :status
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM EnrollmentEntity newer
+                  WHERE newer.classId = e.classId
+                    AND newer.userId = e.userId
+                    AND (
+                        newer.requestedAt > e.requestedAt
+                        OR (newer.requestedAt = e.requestedAt AND newer.id > e.id)
+                    )
+              )
             """,
         countQuery = """
             SELECT COUNT(e)
             FROM EnrollmentEntity e
             WHERE e.classId = :classId
               AND e.status = :status
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM EnrollmentEntity newer
+                  WHERE newer.classId = e.classId
+                    AND newer.userId = e.userId
+                    AND (
+                        newer.requestedAt > e.requestedAt
+                        OR (newer.requestedAt = e.requestedAt AND newer.id > e.id)
+                    )
+              )
             """
     )
     Page<ClassEnrollmentSummaryView> findClassEnrollmentsByClassIdAndStatus(

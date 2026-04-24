@@ -5,6 +5,7 @@ import com.example.be_a.class_.domain.ClassRepository;
 import com.example.be_a.class_.domain.ClassStatus;
 import com.example.be_a.enrollment.domain.EnrollmentEntity;
 import com.example.be_a.enrollment.domain.EnrollmentRepository;
+import com.example.be_a.enrollment.domain.EnrollmentStatus;
 import com.example.be_a.global.error.ApiException;
 import com.example.be_a.global.error.ErrorCode;
 import com.example.be_a.user.application.CurrentUserInfo;
@@ -17,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class EnrollmentApplyService {
 
-    private static final String ENROLLMENT_UNIQUE_CONSTRAINT = "uk_enrollments_class_user";
+    private static final String ENROLLMENT_UNIQUE_CONSTRAINT = "uk_enrollments_class_active_user";
 
     private final ClassRepository classRepository;
     private final EnrollmentRepository enrollmentRepository;
@@ -61,7 +62,11 @@ public class EnrollmentApplyService {
     }
 
     private void validateNotEnrolled(Long classId, Long userId) {
-        if (enrollmentRepository.existsByClassIdAndUserId(classId, userId)) {
+        if (enrollmentRepository.existsByClassIdAndUserIdAndStatusNot(
+            classId,
+            userId,
+            EnrollmentStatus.CANCELLED
+        )) {
             throw new ApiException(ErrorCode.ALREADY_ENROLLED);
         }
     }
