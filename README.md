@@ -135,19 +135,20 @@ SET status='PENDING'
 ### 6. Flyway 이력 관리
 `V1__init.sql` ~ `V4__allow_reapply_after_cancelled_enrollment.sql`. 기존 마이그레이션을 수정하지 않고 V4로 스키마를 진화시켜 이력을 보존
 
-### 7. 상태 drift 방지
-`classes.enrolled_count`는 조회 성능을 위해 저장하는 파생값
-원본 상태는 `enrollments.status`이며, `enrolled_count`는 항상 `PENDING + CONFIRMED` 수와 일치해야 함
+### 7. 상태 drift 감수
+`classes.enrolled_count`는 조회 성능을 위해 저장하는 파생값이며, 원본 상태는 `enrollments.status`입니다.
+의도한 불변식은 `enrolled_count == COUNT(PENDING + CONFIRMED)`입니다.
 
-이 값이 실제 신청 상태와 어긋나는 drift를 막기 위해 아래 방어선을 구축
+다만 현재 구현은 이 불변식을 DB 레벨에서 완전히 강제하지 않습니다. DB `CHECK` 제약은 `0 <= enrolled_count <= capacity` 범위만 보장하고, 상태별 집계값과의 동등성은 애플리케이션 트랜잭션과 테스트로 관리합니다.
+
+상태 drift는 트리거, 별도 reconciliation job, 상태 변경 전용 저장 프로시저 등으로 더 강하게 막을 수 있습니다. 하지만 과제 범위에서는 성능/복잡도 대비 이득이 크지 않다고 판단해, 아래 수준의 방어선을 두고 의도적으로 감수했습니다.
 
 - 정원 증감은 애플리케이션 메모리 계산이 아니라 DB 조건부 UPDATE로 처리
-- DB CHECK 제약으로 `0 <= enrolled_count <= capacity` 보장
 - `WAITING`은 정원에 포함하지 않는 상태로 명확히 분리
 - `PENDING`/`CONFIRMED` 취소 시 `enrolled_count`를 먼저 복구한 뒤 대기열 승급 시 다시 재할당
-- 동시성 테스트에서 매 시나리오 종료 후 `enrolled_count == COUNT(PENDING + CONFIRMED)` 검증
+- 동시성 테스트에서 주요 시나리오 종료 후 `enrolled_count == COUNT(PENDING + CONFIRMED)` 검증
 
-특히 대기열 승급, 신규 신청, 강의 `CLOSED` 전환이 동시에 발생해도 최종 상태에서 파생값과 원본 상태가 일치하는지 통합 테스트로 확인
+따라서 정상 API 경로에서는 주요 경합 상황을 방어하지만, 직접 DB 수정, 향후 상태 전이 코드 누락, 트랜잭션 밖 카운트 변경이 생기면 drift 가능성은 남아 있습니다.
 
 ## 미구현 / 제약사항
 
@@ -336,6 +337,8 @@ Swagger UI(`/swagger-ui.html`)에 전체 스키마와 예시가 자동 생성됩
         DATETIME cancelled_at "nullable"
         BIGINT version "optimistic lock"
         BIGINT active_user_id "VIRTUAL: user_id or NULL"
+        DATETIME created_at
+        DATETIME updated_at
     }
 ```
 
@@ -450,21 +453,27 @@ Testcontainers를 사용하므로 Docker 데몬이 실행 중이어야 함
 ./gradlew build
 ```
 
+### 제출 전 권장 검증
 ```bash
+# 1. 전체 테스트
+./gradlew test
+
+# 2. 빌드 검증
+./gradlew build
+
+# 3. 로컬 MySQL 실행
 docker compose up -d mysql
+
+# 4. 애플리케이션 실행 후 Swagger 확인
 ./gradlew bootRun
-```
+# http://localhost:8080/swagger-ui.html
+# http://localhost:8080/api-docs
 
-브라우저에서 아래 주소를 확인
-
-- Swagger UI: http://localhost:8080/swagger-ui.html
-- OpenAPI JSON: http://localhost:8080/api-docs
-
-확인이 끝나면 필요에 따라 DB 컨테이너를 정리
-
-```bash
+# 5. 종료
 docker compose down
 ```
+
+Docker Compose는 MySQL 중심으로 사용하고, 백엔드는 로컬 Gradle 실행(`./gradlew bootRun`)으로 띄웁니다. 과제 검증 과정에서 코드 수정 후 테스트/빌드/재실행을 빠르게 반복하기 위한 선택입니다.
 
 ### 주요 테스트 커버리지
 - **기능 통합 테스트** (MockMvc + Testcontainers MySQL)
