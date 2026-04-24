@@ -18,6 +18,7 @@ import com.example.be_a.support.MySqlTestContainerSupport;
 import com.example.be_a.user.application.CurrentUserInfo;
 import com.example.be_a.user.domain.UserRole;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.Callable;
@@ -137,7 +138,11 @@ class EnrollmentApplyConcurrencyIntegrationTest extends MySqlTestContainerSuppor
                 return false;
             }
             return invocation.callRealMethod();
-        }).when(enrollmentRepositorySpy).existsByClassIdAndUserId(eq(classEntity.getId()), eq(20L));
+        }).when(enrollmentRepositorySpy).existsByClassIdAndUserIdAndStatusNot(
+            eq(classEntity.getId()),
+            eq(20L),
+            eq(EnrollmentStatus.CANCELLED)
+        );
 
         Callable<Void> applyTask = () -> {
             try {
@@ -176,6 +181,70 @@ class EnrollmentApplyConcurrencyIntegrationTest extends MySqlTestContainerSuppor
         assertThat(enrollments.get(0).getStatus()).isEqualTo(EnrollmentStatus.PENDING);
     }
 
+    @Test
+    void CANCELLED_이력이_있는_사용자가_동시에_두_번_재신청하면_한_건만_PENDING으로_저장된다() throws Exception {
+        ClassEntity classEntity = saveOpenClass(10L, 10, "취소 이력 재신청 경합 강의");
+        insertCancelledEnrollment(classEntity.getId(), 20L);
+        Queue<String> results = new ConcurrentLinkedQueue<>();
+        CountDownLatch existsReadyLatch = new CountDownLatch(2);
+        CountDownLatch existsReleaseLatch = new CountDownLatch(1);
+
+        doAnswer(invocation -> {
+            Long classId = invocation.getArgument(0);
+            Long userId = invocation.getArgument(1);
+            if (classEntity.getId().equals(classId) && Long.valueOf(20L).equals(userId)) {
+                existsReadyLatch.countDown();
+                assertThat(existsReleaseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+                return false;
+            }
+            return invocation.callRealMethod();
+        }).when(enrollmentRepositorySpy).existsByClassIdAndUserIdAndStatusNot(
+            eq(classEntity.getId()),
+            eq(20L),
+            eq(EnrollmentStatus.CANCELLED)
+        );
+
+        Callable<Void> applyTask = () -> {
+            try {
+                enrollmentApplyService.apply(
+                    new CurrentUserInfo(20L, UserRole.STUDENT),
+                    new ApplyEnrollmentCommand(classEntity.getId(), false)
+                );
+                results.add("PENDING");
+            } catch (ApiException exception) {
+                results.add(exception.getErrorCode().name());
+            } catch (Exception exception) {
+                results.add("ERROR:" + exception.getClass().getSimpleName());
+            }
+            return null;
+        };
+
+        var first = executorService.submit(applyTask);
+        var second = executorService.submit(applyTask);
+
+        assertThat(existsReadyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+        existsReleaseLatch.countDown();
+
+        first.get(10, TimeUnit.SECONDS);
+        second.get(10, TimeUnit.SECONDS);
+
+        long successCount = results.stream().filter("PENDING"::equals).count();
+        long duplicateCount = results.stream().filter("ALREADY_ENROLLED"::equals).count();
+
+        ClassEntity savedClass = classRepository.findById(classEntity.getId()).orElseThrow();
+        List<EnrollmentEntity> enrollments = enrollmentRepository.findAll();
+
+        assertThat(results).hasSize(2);
+        assertThat(successCount).isEqualTo(1);
+        assertThat(duplicateCount).isEqualTo(1);
+        assertThat(results.stream().filter(result -> result.startsWith("ERROR:"))).isEmpty();
+        assertThat(savedClass.getEnrolledCount()).isEqualTo(1);
+        assertThat(enrollments).hasSize(2);
+        assertThat(enrollments)
+            .extracting(EnrollmentEntity::getStatus)
+            .containsExactlyInAnyOrder(EnrollmentStatus.CANCELLED, EnrollmentStatus.PENDING);
+    }
+
     private void ensureUser(Long id, String email, String name, String role) {
         jdbcTemplate.update("""
             INSERT INTO users (id, email, name, role)
@@ -196,5 +265,19 @@ class EnrollmentApplyConcurrencyIntegrationTest extends MySqlTestContainerSuppor
         ));
         jdbcTemplate.update("UPDATE classes SET status = ? WHERE id = ?", ClassStatus.OPEN.name(), classEntity.getId());
         return classRepository.findById(classEntity.getId()).orElseThrow();
+    }
+
+    private void insertCancelledEnrollment(Long classId, Long userId) {
+        LocalDateTime cancelledAt = LocalDateTime.of(2026, 4, 23, 10, 0);
+        jdbcTemplate.update("""
+            INSERT INTO enrollments (class_id, user_id, status, requested_at, cancelled_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            classId,
+            userId,
+            EnrollmentStatus.CANCELLED.name(),
+            cancelledAt.minusDays(1),
+            cancelledAt
+        );
     }
 }
