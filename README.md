@@ -336,6 +336,8 @@ Swagger UI(`/swagger-ui.html`)에 전체 스키마와 예시가 자동 생성됩
         DATETIME cancelled_at "nullable"
         BIGINT version "optimistic lock"
         BIGINT active_user_id "VIRTUAL: user_id or NULL"
+        DATETIME created_at
+        DATETIME updated_at
     }
 ```
 
@@ -448,22 +450,6 @@ Testcontainers를 사용하므로 Docker 데몬이 실행 중이어야 함
 ### 빌드 (테스트 포함)
 ```bash
 ./gradlew build
-```
-
-```bash
-docker compose up -d mysql
-./gradlew bootRun
-```
-
-브라우저에서 아래 주소를 확인
-
-- Swagger UI: http://localhost:8080/swagger-ui.html
-- OpenAPI JSON: http://localhost:8080/api-docs
-
-확인이 끝나면 필요에 따라 DB 컨테이너를 정리
-
-```bash
-docker compose down
 ```
 
 ### 주요 테스트 커버리지
