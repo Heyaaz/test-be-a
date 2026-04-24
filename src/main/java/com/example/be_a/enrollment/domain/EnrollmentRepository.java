@@ -10,7 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface EnrollmentRepository extends JpaRepository<EnrollmentEntity, Long> {
 
-    boolean existsByClassIdAndUserId(Long classId, Long userId);
+    boolean existsByClassIdAndUserIdAndStatusNot(Long classId, Long userId, EnrollmentStatus status);
 
     Page<EnrollmentEntity> findAllByUserId(Long userId, Pageable pageable);
 
