@@ -62,7 +62,7 @@ docker compose down -v   # 볼륨까지 제거
 요구사항 원문이 모호하거나 열려 있는 지점에 대해 아래와 같이 해석
 
 ### 상태 전이
-- **강의**: `DRAFT ↔ OPEN → CLOSED` 단방향. `CLOSED`에서는 수정, 되돌리기 모두 차단
+- **강의**: `DRAFT → OPEN → CLOSED` 단방향. `CLOSED`에서는 수정, 되돌리기 모두 차단
 - **수강 신청**: `PENDING → CONFIRMED → CANCELLED` 및 `WAITING → PENDING → CONFIRMED → CANCELLED`. `CANCELLED`는 최종 상태지만, 동일 (class, user)에 대한 **재신청은 허용**
 
 ### 정원 정의
@@ -410,7 +410,6 @@ stateDiagram-v2
     [*] --> DRAFT: 강의 생성
     DRAFT --> OPEN: 모집 시작
     OPEN --> CLOSED: 모집 마감
-    DRAFT --> CLOSED: 개설 철회
     CLOSED --> [*]
 
     state "수강 신청" as enr {
