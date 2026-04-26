@@ -164,7 +164,7 @@ public class ClassController {
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "강의 상태 전환", description = "강의 소유 크리에이터가 DRAFT→OPEN, DRAFT→CLOSED, OPEN→CLOSED 상태 전이를 수행합니다.")
+    @Operation(summary = "강의 상태 전환", description = "강의 소유 크리에이터가 DRAFT→OPEN, OPEN→CLOSED 상태 전이를 수행합니다.")
     @Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true, description = "요청 사용자 ID", example = "1")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "상태 전환 성공"),
